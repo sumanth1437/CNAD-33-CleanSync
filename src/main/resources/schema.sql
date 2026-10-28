@@ -1,0 +1,27 @@
+CREATE TABLE IF NOT EXISTS bins (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  location VARCHAR(200) NOT NULL,
+  fill_percentage INTEGER NOT NULL DEFAULT 0 CHECK (fill_percentage BETWEEN 0 AND 100),
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS collection_tasks (
+  id SERIAL PRIMARY KEY,
+  bin_id INTEGER NOT NULL REFERENCES bins(id),
+  bin_name VARCHAR(100) NOT NULL,
+  location VARCHAR(200) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP NULL
+);
+
+INSERT INTO bins(name, location, fill_percentage)
+SELECT 'BIN001', 'College Gate', 35
+WHERE NOT EXISTS (SELECT 1 FROM bins WHERE name='BIN001');
+INSERT INTO bins(name, location, fill_percentage)
+SELECT 'BIN002', 'Main Road', 86
+WHERE NOT EXISTS (SELECT 1 FROM bins WHERE name='BIN002');
+INSERT INTO bins(name, location, fill_percentage)
+SELECT 'BIN003', 'Bus Stop', 97
+WHERE NOT EXISTS (SELECT 1 FROM bins WHERE name='BIN003');

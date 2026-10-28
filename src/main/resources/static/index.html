@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CleanSync | Smart Waste Management</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f3f6f8;color:#1e293b}
+header{background:#14532d;color:white;padding:22px 5%;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+header h1{margin:0;font-size:26px}header p{margin:6px 0 0;color:#dcfce7}
+main{max-width:1100px;margin:24px auto;padding:0 18px}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+.card,.panel{background:white;padding:18px;border-radius:12px;box-shadow:0 2px 8px #0f172a0c}.statnum{font-size:28px;font-weight:bold;margin-top:8px}
+.layout{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:18px}@media(max-width:760px){.layout{grid-template-columns:1fr}}
+h2{font-size:19px;margin-top:0}.bin{border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin:10px 0}
+.binhead{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}.bar{height:10px;background:#e2e8f0;border-radius:9px;margin:12px 0;overflow:hidden}.fill{height:100%;border-radius:9px}
+button{border:0;border-radius:7px;padding:9px 12px;cursor:pointer;background:#166534;color:white;margin:3px 3px 3px 0}button.secondary{background:#475569}button.warning{background:#b45309}
+input{padding:9px;border:1px solid #cbd5e1;border-radius:7px;width:100%;margin:5px 0 10px}label{font-size:13px;font-weight:bold}
+form{display:grid;gap:4px}.task{border-bottom:1px solid #e2e8f0;padding:12px 0}.muted{color:#64748b;font-size:13px}.status{font-weight:bold;font-size:12px}.error{color:#b91c1c}
+</style></head>
+<body>
+<header><div><h1>♻ CleanSync</h1><p>Smart Waste Management and Collection Platform</p></div><div id="apiStatus">Connecting to API...</div></header>
+<main>
+<div class="stats">
+ <div class="card"><div class="muted">Total bins</div><div class="statnum" id="totalBins">—</div></div>
+ <div class="card"><div class="muted">Bins at 80% or more</div><div class="statnum" id="fullBins">—</div></div>
+ <div class="card"><div class="muted">Pending tasks</div><div class="statnum" id="pendingTasks">—</div></div>
+ <div class="card"><div class="muted">Completed tasks</div><div class="statnum" id="completedTasks">—</div></div>
+</div>
+<div class="layout">
+<section class="panel"><h2>Garbage bins</h2><p class="muted">Use “Simulate sensor” to change a bin's fill level.</p><div id="bins">Loading bins...</div></section>
+<section class="panel">
+<h2>Add a bin</h2>
+<form id="addForm">
+<label for="binName">Bin name</label><input id="binName" placeholder="e.g. BIN004" required>
+<label for="binLocation">Location</label><input id="binLocation" placeholder="e.g. Park Entrance" required>
+<label for="binFill">Initial fill percentage</label><input id="binFill" type="number" min="0" max="100" value="0" required>
+<button type="submit">Add bin</button>
+</form>
+<hr style="border:0;border-top:1px solid #e2e8f0;margin:22px 0">
+<h2>Collection tasks</h2><div id="tasks">Loading tasks...</div>
+<div id="message" class="muted" role="status" style="margin-top:12px"></div>
+</section></div></main>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path, options={}) {
+  const response=await fetch('/api'+path,{headers:{'Content-Type':'application/json'},...options});
+  if(!response.ok){let body={};try{body=await response.json()}catch(e){}throw new Error(body.message||'Request failed: '+response.status);}
+  if(response.status===204)return null;return response.json();
+}
+function statusFor(n){return n>=80?'COLLECTION REQUIRED':n>=60?'NEARLY FULL':'NORMAL'}
+function colorFor(n){return n>=80?'#dc2626':n>=60?'#d97706':'#16a34a'}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function refresh(){
+  try{
+    const [bins,tasks]=await Promise.all([api('/bins'),api('/tasks')]);
+    $('apiStatus').textContent='● API connected';$('apiStatus').style.color='#dcfce7';
+    $('totalBins').textContent=bins.length;$('fullBins').textContent=bins.filter(b=>b.fill_percentage>=80).length;
+    $('pendingTasks').textContent=tasks.filter(t=>t.status==='PENDING').length;
+    $('completedTasks').textContent=tasks.filter(t=>t.status==='COMPLETED').length;
+    $('bins').innerHTML=bins.map(b=>`<div class="bin"><div class="binhead"><strong>${escapeHtml(b.name)} — ${escapeHtml(b.location)}</strong><span class="status" style="color:${colorFor(b.fill_percentage)}">${statusFor(b.fill_percentage)}</span></div><div class="bar"><div class="fill" style="width:${b.fill_percentage}%;background:${colorFor(b.fill_percentage)}"></div></div><div>${b.fill_percentage}% full</div><button class="secondary" onclick="simulate(${b.id},${b.fill_percentage})">Simulate sensor</button><button class="warning" onclick="createTask(${b.id})">Create collection task</button></div>`).join('')||'<p>No bins yet. Add your first bin.</p>';
+    $('tasks').innerHTML=tasks.map(t=>`<div class="task"><strong>Task #${t.id} — ${escapeHtml(t.bin_name)}</strong><div class="muted">${escapeHtml(t.location)} · ${t.status}</div>${t.status==='PENDING'?`<button onclick="completeTask(${t.id})">Mark completed</button>`:''}</div>`).join('')||'<p class="muted">No collection tasks yet.</p>';
+  }catch(e){$('apiStatus').textContent='API connection failed';$('apiStatus').style.color='#fecaca';$('message').textContent=e.message;$('message').className='error'}
+}
+async function simulate(id,current){const value=prompt('Enter simulated fill percentage (0–100):',String(Math.min(100,current+15)));if(value===null)return;const n=Number(value);if(!Number.isInteger(n)||n<0||n>100){alert('Enter a whole number from 0 to 100.');return}try{await api(`/bins/${id}/fill`,{method:'PUT',body:JSON.stringify({fillPercentage:n})});$('message').textContent='Sensor reading updated.';refresh()}catch(e){$('message').textContent=e.message}}
+async function createTask(id){try{await api(`/bins/${id}/collect`,{method:'POST'});$('message').textContent='Collection task created.';refresh()}catch(e){$('message').textContent=e.message}}
+async function completeTask(id){try{await api(`/tasks/${id}/complete`,{method:'PATCH'});$('message').textContent='Task completed; bin fill reset to 0%.';refresh()}catch(e){$('message').textContent=e.message}}
+$('addForm').addEventListener('submit',async e=>{e.preventDefault();try{await api('/bins',{method:'POST',body:JSON.stringify({name:$('binName').value,location:$('binLocation').value,fillPercentage:Number($('binFill').value)})});$('addForm').reset();$('binFill').value=0;$('message').textContent='Bin added successfully.';refresh()}catch(err){$('message').textContent=err.message}});
+refresh();setInterval(refresh,10000);
+</script></body></html>
